@@ -1,0 +1,100 @@
+from PySide import QtCore, QtGui
+import FreeCAD,FreeCADGui,Part
+from math import *
+i=0
+timer=QtCore.QTimer()
+externalteeth=0
+planets=4
+
+def update():
+	global i, externalteeth
+	sungear = App.ActiveDocument.first_sun_involute
+	secondsungear = App.ActiveDocument.second_sun_involute
+	rollergear = App.ActiveDocument.first_planet_0_involute
+	second_planet=App.ActiveDocument.second_planet_0_involute
+	externalgear = App.ActiveDocument.first_ring_involute
+	outputgear = App.ActiveDocument.second_ring_involute
+
+	sun_radius = sungear.Modules*sungear.NumberOfTeeth/2
+	roller_radius = rollergear.Modules*rollergear.NumberOfTeeth/2
+	external_radius = externalgear.Modules*externalgear.NumberOfTeeth/2
+	roller_path_radius = (sun_radius+external_radius)/2.0
+
+	planet_start_rotation = (1-(rollergear.NumberOfTeeth % 2))*180.0/rollergear.NumberOfTeeth
+	second_planet_start_rotation = (1-(second_planet.NumberOfTeeth % 2))*180.0/second_planet.NumberOfTeeth
+
+	output_start_rotation = 180.0/outputgear.NumberOfTeeth + second_planet_start_rotation*second_planet.NumberOfTeeth/outputgear.NumberOfTeeth
+
+	roller_angle = i*sungear.NumberOfTeeth/float(sungear.NumberOfTeeth+externalgear.NumberOfTeeth)
+	planet_rotation = -(i)*(0.5*sungear.NumberOfTeeth/rollergear.NumberOfTeeth)
+	
+	output_angle = roller_angle * (outputgear.NumberOfTeeth-second_planet.NumberOfTeeth)/outputgear.NumberOfTeeth \
+		+ planet_rotation*second_planet.NumberOfTeeth/outputgear.NumberOfTeeth
+
+	first_z = App.ActiveDocument.first_sun.Placement.Base.z
+	second_z = App.ActiveDocument.second_sun.Placement.Base.z
+
+
+	second_sun_angle = roller_angle * (secondsungear.NumberOfTeeth+second_planet.NumberOfTeeth)/secondsungear.NumberOfTeeth- planet_rotation*second_planet.NumberOfTeeth/secondsungear.NumberOfTeeth
+
+	App.ActiveDocument.first_sun.Placement=App.Placement(App.Vector(0,0,first_z), App.Rotation(App.Vector(0,0,1),i), App.Vector(0,0,0))
+
+	for p_index in range(0,planets):
+		a = p_index*360.0/planets
+		planet_x = cos(pi/180.0*(a+roller_angle))*roller_path_radius
+		planet_y = sin(pi/180.0*(a+roller_angle))*roller_path_radius
+
+		planet_add_rotation = -(a*float(sungear.NumberOfTeeth+externalgear.NumberOfTeeth)/sungear.NumberOfTeeth)*(0.5*sungear.NumberOfTeeth/rollergear.NumberOfTeeth)
+		second_planet_add_rotation = -(a*float(secondsungear.NumberOfTeeth+outputgear.NumberOfTeeth)/secondsungear.NumberOfTeeth)*(0.5*secondsungear.NumberOfTeeth/second_planet.NumberOfTeeth)
+
+		p1 = App.ActiveDocument.getObject("first_planet_%i"%p_index)
+		p2 = App.ActiveDocument.getObject("second_planet_%i"%p_index)
+		p1.Placement=App.Placement(App.Vector(planet_x, planet_y,first_z), App.Rotation(App.Vector(0,0,1),planet_rotation+planet_start_rotation + planet_add_rotation), App.Vector(0,0,0))
+		p2.Placement=App.Placement(App.Vector(planet_x, planet_y,second_z), App.Rotation(App.Vector(0,0,1),planet_rotation+second_planet_start_rotation + second_planet_add_rotation), App.Vector(0,0,0))
+
+	
+	App.ActiveDocument.second_ring.Placement=App.Placement(App.Vector(0,0,second_z), App.Rotation(App.Vector(0,0,1),output_angle+output_start_rotation), App.Vector(0,0,0))
+
+	App.ActiveDocument.second_sun.Placement=App.Placement(App.Vector(0,0,second_z), App.Rotation(App.Vector(0,0,1),second_sun_angle), App.Vector(0,0,0))
+
+	return (i, roller_angle, planet_rotation, output_angle)
+
+class Ui_MainWindow(object):
+	def sliderChanged(self, val):
+		global i
+		i=val/10.0
+		result = update()
+		self.angle_label.setText("input: %.1f cage %.1f, planet %.1f, output %.1f"%result)
+		self.ratio_label.setText("ratio: %.1f"%(float(result[0])/result[3]))
+
+	def setupUi(self, MainWindow):
+		self.window = MainWindow
+		global switch
+		
+		MainWindow.setObjectName("MainWindow")
+		MainWindow.resize(400, 450)
+		self.widget = QtGui.QWidget()
+		self.widgetLayout = QtGui.QVBoxLayout()
+		self.widget.setLayout(self.widgetLayout)
+		self.horizontalSlider = QtGui.QSlider()                                  # create horizontalSlider
+		#self.horizontalSlider.setGeometry(QtCore.QRect(64, 5, 302, 16))                     # coordinates position
+
+		self.horizontalSlider.setMinimum(0)
+		self.horizontalSlider.setMaximum(10000)
+		self.horizontalSlider.setOrientation(QtCore.Qt.Horizontal)                          # orientation Horizontal
+		self.horizontalSlider.setInvertedAppearance(False)                                  # displacement rigth to left or left to rigth value "True" or "False"
+		self.horizontalSlider.setObjectName("horizontalSlider")                  # object Name
+		self.horizontalSlider.valueChanged.connect(self.sliderChanged)               # connect on "def on_horizontal_slider:" for execute action
+		self.widgetLayout.addWidget(self.horizontalSlider)
+		MainWindow.setCentralWidget(self.widget)	
+
+		self.angle_label = QtGui.QLabel("Info")
+		self.widgetLayout.addWidget(self.angle_label)
+		self.ratio_label = QtGui.QLabel("ratio")
+		self.widgetLayout.addWidget(self.ratio_label)
+
+
+MainWindow = QtGui.QMainWindow()
+ui = Ui_MainWindow()
+ui.setupUi(MainWindow)
+MainWindow.show() 
